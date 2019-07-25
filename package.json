@@ -1,0 +1,24 @@
+{
+  "name": "instagram-parser",
+  "version": "1.0.0",
+  "description": "",
+  "bin": "./bin/main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/notaeugene/instagram-parser.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/notaeugene/instagram-parser/issues"
+  },
+  "homepage": "https://github.com/notaeugene/instagram-parser#readme",
+  "dependencies": {
+    "commander": "^2.20.0",
+    "puppeteer": "^1.19.0"
+  }
+}
