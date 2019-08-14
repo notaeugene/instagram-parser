@@ -11,24 +11,50 @@ program
   .option('-u, --username <username>', 'Set username')
   .option('-d, --dest <dest>', 'Set destionation folder')
   // .option('-o, --offset [offset]', 'Set images offset')
-  // .option('-l, --limit [limit]', 'Set limit of images')
+  .option('-l, --limit <limit>', 'Set images limit')
   .parse(process.argv);
 
 const IMG_DEST = program.dest || process.cwd();
 const PROFILE_URL = `https://instagram.com/${program.username}`;
 
+function wait (ms) {
+  return new Promise(resolve => setTimeout(() => resolve(), ms));
+}
+
 (async () => {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
+  const bodyHandle = await page.$('body');
+  const { height } = await bodyHandle.boundingBox();
+  await bodyHandle.dispose();
+
+  let imgSrcList = [];
+
   await page.goto(PROFILE_URL);
 
-  // Get list of images
-  const imgSourceList = await page.evaluate(() => {
-    const imgSelector = 'main[role="main"] article img';
-    const imgElementsList = Array.from(document.querySelectorAll(imgSelector));
-    return imgElementsList.map(img => img.src);
+  const limit = program.limit || await page.evaluate(() => {
+    const postsAmountStr = document.querySelector('header li:first-child').innerText;
+    return parseInt(postsAmountStr);
   });
+
+  // Get urls list
+  while (imgSrcList.length < limit) {
+    const batchSrcList = await page.evaluate(() => {
+      const imgSelector = 'main[role="main"] article img:not(.is-parsed)';
+      const imgElementsList = Array.from(document.querySelectorAll(imgSelector));
+
+      imgElementsList.forEach(img => img.classList.add('is-parsed'));
+
+      return imgElementsList.map(img => img.src);
+    });
+
+    imgSrcList.push(...batchSrcList);
+
+    await page.evaluate(`window.scrollBy(0, ${height})`);
+
+    await wait(100);
+  }
 
   // Get image by url
   const getImgByUrl = async url => {
@@ -46,7 +72,7 @@ const PROFILE_URL = `https://instagram.com/${program.username}`;
     });
   }
 
-  for (let url of imgSourceList) {
+  for (let url of imgSrcList) {
     const { filename, buffer } = await getImgByUrl(url);
     const imgPath = path.resolve(IMG_DEST, `${filename}.jpg`);
 
