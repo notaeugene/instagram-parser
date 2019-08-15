@@ -6,6 +6,7 @@ const path = require('path');
 const program = require('commander');
 const puppeteer = require('puppeteer');
 const shortid = require('shortid');
+const ora = require('ora');
 
 program
   .option('-u, --username <username>', 'Set username')
@@ -22,9 +23,23 @@ function wait (ms) {
 }
 
 (async () => {
+  const spinner = ora('Preparing').start();
+
+  process.on('uncaughtException', err => {
+    spinner.fail(err.message);
+    process.exit(1);
+  });
+
+  if (program.dest) {
+    await fs.mkdir(IMG_DEST, (err) => {
+      if (err) throw err;
+    });
+  }
+
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
+  // Get the height of the rendered page
   const bodyHandle = await page.$('body');
   const { height } = await bodyHandle.boundingBox();
   await bodyHandle.dispose();
@@ -38,8 +53,12 @@ function wait (ms) {
     return parseInt(postsAmountStr);
   });
 
+  spinner.succeed().start('Getting urls');
+
   // Get urls list
   while (imgSrcList.length < limit) {
+    await wait(100);
+
     const batchSrcList = await page.evaluate(() => {
       const imgSelector = 'main[role="main"] article img:not(.is-parsed)';
       const imgElementsList = Array.from(document.querySelectorAll(imgSelector));
@@ -49,11 +68,15 @@ function wait (ms) {
       return imgElementsList.map(img => img.src);
     });
 
+    if (imgSrcList.length + batchSrcList.length > limit) {
+      const deleteCount = (imgSrcList.length + batchSrcList.length) - limit;
+      const startIndex = batchSrcList.length - deleteCount;
+      batchSrcList.splice(startIndex, deleteCount);
+    }
+
     imgSrcList.push(...batchSrcList);
 
     await page.evaluate(`window.scrollBy(0, ${height})`);
-
-    await wait(100);
   }
 
   // Get image by url
@@ -66,13 +89,11 @@ function wait (ms) {
   };
 
   // Save images to disk
-  if (program.dest) {
-    await fs.mkdir(IMG_DEST, (err) => {
-      if (err) throw err;
-    });
-  }
+  spinner.succeed().start(`Saving images 0 of ${limit}`);
 
-  for (let url of imgSrcList) {
+  for (const [index, url] of imgSrcList.entries()) {
+    spinner.text = `Saving images ${index + 1} of ${limit}`;
+
     const { filename, buffer } = await getImgByUrl(url);
     const imgPath = path.resolve(IMG_DEST, `${filename}.jpg`);
 
@@ -80,6 +101,8 @@ function wait (ms) {
       if (err) throw err;
     });
   }
+
+  spinner.succeed();
 
   await browser.close();
 })();
